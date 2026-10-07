@@ -22,4 +22,3 @@ export function cardById(cards, id) {
 export function byDueDate(a, b) {
   return a.due.localeCompare(b.due);
 }
-

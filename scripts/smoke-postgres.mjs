@@ -56,7 +56,7 @@ try {
  await second.getByRole('status').filter({hasText:'live sync'}).waitFor();
  await page.getByLabel(item.title+' '+key).selectOption(item[key]);
  await row.getByText('revision 3',{exact:false}).waitFor();
- 
+
  await second.locator('[data-item-id="'+item.id+'"]').getByText('revision 3',{exact:false}).waitFor();
  const otherContext=await browser.newContext(),other=await otherContext.newPage();watch(other);
  await other.goto(base);await other.getByRole('button',{name:'Create private workspace'}).click();

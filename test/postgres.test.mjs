@@ -60,7 +60,7 @@ test('real disposable PostgreSQL: HTTP ownership, CSRF, versions, atomic audit a
   assert.notEqual(recovered.headers.get('set-cookie').split(';')[0],b.cookie);
   const fresh={cookie:recovered.headers.get('set-cookie').split(';')[0],csrf:(await recovered.json()).csrfToken};
   assert.equal((await snapshot(fresh)).items.length,seed.length);
-  
+
   Object.assign(b,fresh);
   const bSession=await store.session(b.cookie.split('=')[1]);
   const events=createEvents(()=>store,20,2000);
@@ -80,6 +80,6 @@ test('real disposable PostgreSQL: HTTP ownership, CSRF, versions, atomic audit a
   assert.equal((await limitEvents(new Request(app.base+'/api/events',{headers:{cookie:b.cookie}}))).status,429);
   for(const open of streams)await open.body.cancel();
   const reconnect=await limitEvents(new Request(app.base+'/api/events',{headers:{cookie:b.cookie}}));assert.equal(reconnect.status,200);await reconnect.body.cancel();
-  
+
  }finally{if(app)await app.close();await pg.close();}
 });
