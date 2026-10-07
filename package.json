@@ -1,0 +1,37 @@
+{
+  "name": "vura-example-drift",
+  "version": "0.1.0",
+  "private": false,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22 <23"
+  },
+  "scripts": {
+    "dev": "node --env-file-if-exists=.env node_modules/@celsian/vura-cli/dist/bin.js dev",
+    "build": "node scripts/publish-source.mjs && vura build",
+    "start": "node --env-file-if-exists=.env dist/server/entry.js",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs",
+    "test:postgres": "node --test test/postgres.test.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:postgres": "node scripts/smoke-postgres.mjs",
+    "db:migrate": "node --env-file-if-exists=.env.migrate scripts/migrate.mjs",
+    "verify": "npm run typecheck && npm test && npm run build && npm run smoke",
+    "deploy": "npm run build && vura-platform deploy",
+    "deploy:prod": "npm run build && vura-platform deploy --prod"
+  },
+  "dependencies": {
+    "@celsian/vura-core": "0.8.3",
+    "@celsian/core": "0.6.5",
+    "@neondatabase/serverless": "1.1.0",
+    "what-framework": "0.13.10"
+  },
+  "devDependencies": {
+    "@celsian/vura-cli": "0.8.3",
+    "@types/node": "22.10.0",
+    "typescript": "5.7.3",
+    "playwright": "1.63.0",
+    "vura-platform": "0.3.0"
+  }
+}

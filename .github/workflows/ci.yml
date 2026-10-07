@@ -1,0 +1,28 @@
+name: Verify backend reference
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Require a real local PostgreSQL toolchain
+        run: |
+          demo_pg_bin="$(pg_config --bindir)"
+          test -x "$demo_pg_bin/initdb"
+          test -x "$demo_pg_bin/pg_ctl"
+          test -x "$demo_pg_bin/psql"
+          echo "DEMO_TEST_POSTGRES_BIN=$demo_pg_bin" >> "$GITHUB_ENV"
+      - run: npx playwright install --with-deps chromium
+      - run: npm run verify
+      - run: npm run smoke:postgres
+      - run: npm audit --omit=dev --audit-level=moderate

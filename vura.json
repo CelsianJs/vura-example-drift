@@ -1,0 +1,6 @@
+{
+  "node": "22",
+  "install": "npm ci",
+  "build": "npm run build",
+  "output": "dist"
+}

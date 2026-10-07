@@ -1,0 +1,10 @@
+node_modules/
+dist/
+public/source/
+.vura/
+.omx/
+.env
+.env.*
+!.env.example
+!.env.migrate.example
+test-results/

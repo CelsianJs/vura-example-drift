@@ -1,0 +1,62 @@
+import assert from 'node:assert/strict';
+import { spawn } from 'node:child_process';
+import { createServer } from 'node:net';
+import { request as httpRequest } from 'node:http';
+import { mkdtemp } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { chromium } from 'playwright';
+const listener=createServer();await new Promise(r=>listener.listen(0,'127.0.0.1',r));const port=listener.address().port;await new Promise(r=>listener.close(r));
+const base='http://127.0.0.1:'+port;
+const envMarker='owner-proof-do-not-render';
+const server=spawn(process.execPath,['dist/server/entry.js'],{env:{...process.env,HOST:'127.0.0.1',PORT:String(port),DATABASE_URL:'',APP_ORIGIN:base,MIGRATION_DATABASE_URL:envMarker},stdio:['ignore','pipe','pipe']});
+let logs='';server.stdout.on('data',chunk=>logs+=chunk);server.stderr.on('data',chunk=>logs+=chunk);
+let browser;
+try{
+ let ready=false;for(let i=0;i<100;i++){try{const r=await fetch(base+'/api/health');if(r.ok){ready=true;break;}}catch{}await new Promise(r=>setTimeout(r,100));}
+ assert.ok(ready,'Built server failed to start: '+logs.slice(-2000));
+ assert.equal((await fetch(base+'/styles.css')).status,200);
+ const guide=await fetch(base+'/build');assert.equal(guide.status,200);const guideText=await guide.text();
+ assert.ok(guideText.includes('Atomic mutation and audit'));assert.ok(guideText.includes('Proof, separated by environment'));
+ assert.ok(!guideText.includes(envMarker)&&!guideText.includes('/Users/')&&!guideText.includes('ENG-6228'));
+ for(const path of ['/source/src/lib/store.js.txt','/source/src/lib/security.js.txt','/source/db/002.sql.txt','/source/README.md.txt']){const source=await fetch(base+path);assert.equal(source.status,200);assert.ok(!(await source.text()).includes(envMarker));}
+ assert.equal((await fetch(base+'/source/.env.txt')).status,404);
+ const failed=await fetch(base+'/api/session',{method:'POST',headers:{origin:base}});
+ assert.equal(failed.status,503);assert.equal(failed.headers.get('set-cookie'),null);assert.equal(failed.headers.get('cache-control'),'private, no-store');
+ assert.equal((await failed.json()).error.code,'STORAGE_UNAVAILABLE');
+ assert.equal((await fetch(base+'/api/session',{method:'POST',headers:{origin:'https://evil.example'}})).status,403);
+ const chunked=await new Promise((resolve,reject)=>{const req=httpRequest(base+'/api/session',{method:'POST',headers:{origin:base,'content-type':'application/json'}},res=>{res.resume();res.on('end',()=>resolve(res.statusCode));});req.on('error',reject);req.write(' '.repeat(9000));req.end('{}');});
+ assert.equal(chunked,413,'Raw chunked JSON whitespace must be bounded.');
+ browser=await chromium.launch({headless:true});
+ const page=await browser.newPage({viewport:{width:1480,height:900}});
+ const errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ page.on('console',m=>{if(['error','warning'].includes(m.type())&&!/Failed to load resource.*(?:503|401)/.test(m.text()))errors.push(m.text());});
+ await page.goto(base);
+ await page.getByRole('button',{name:'Create private workspace'}).waitFor();
+ assert.ok((await page.title()).includes('Vura backend reference'));
+ assert.ok((await page.locator('h1').textContent()).length>10);
+ await page.getByRole('button',{name:'Create private workspace'}).click();
+ await page.getByRole('alert').filter({hasText:'DATABASE_URL is not configured'}).waitFor();
+ assert.equal(await page.locator('[data-item-id]').count(),0);
+ assert.equal(await page.evaluate(()=>localStorage.length),0);
+ assert.equal(await page.getByRole('button',{name:'Delete my workspace'}).isDisabled(),true);
+ const screenshots=await mkdtemp(join(tmpdir(),'vura-example-browser-'));
+ await page.screenshot({path:join(screenshots,'desktop.png'),fullPage:true});
+ await page.setViewportSize({width:390,height:844});
+ await page.screenshot({path:join(screenshots,'mobile.png'),fullPage:true});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false,'Mobile horizontal overflow');
+ await page.goto(base+'/build');assert.equal(await page.locator('pre').count(),3);
+ await page.screenshot({path:join(screenshots,'guide-mobile.png'),fullPage:true});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false,'Guide mobile overflow');
+ await page.setViewportSize({width:1480,height:900});
+ await page.screenshot({path:join(screenshots,'guide-desktop.png'),fullPage:true});
+ assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>window.innerWidth),false,'Guide desktop overflow');
+ const noJS=await browser.newPage({javaScriptEnabled:false});await noJS.goto(base+'/build');assert.ok((await noJS.locator('h1').textContent()).length>15);await noJS.close();
+ assert.deepEqual(errors,[]);
+ console.log(JSON.stringify({status:'pass',builtArtifact:true,database:'absent/fail-closed',http:['health','styles','static-guide-no-env-leak','public-source-links','no-env-source','503-no-cookie','origin-403','raw-chunked-413'],browser:['meaningful-heading','real-create-503','no-fake-items','no-localStorage','product-and-guide1480/390-no-overflow','guide-with-JS-disabled','no-relevant-console-errors'],screenshots},null,2));
+}finally{
+ await browser?.close();
+ server.kill('SIGTERM');
+ if(server.exitCode===null)await Promise.race([new Promise(r=>server.once('exit',r)),new Promise(r=>setTimeout(()=>{server.kill('SIGKILL');r();},5000))]);
+}
